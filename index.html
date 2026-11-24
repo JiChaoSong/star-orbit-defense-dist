@@ -114,6 +114,8 @@ h1 { font-size: 26px; letter-spacing: .09em; line-height: 1.18; font-weight: 850
 [data-kind="coil"] { --gear-color: #a3e6e2; }
 [data-kind="spike"] { --gear-color: #fbc88e; }
 [data-kind="dynamo"] { --gear-color: #b4e4ff; }
+[data-kind="prism"] { --gear-color: #d5b5ff; }
+[data-kind="accelerator"] { --gear-color: #87efd2; }
 .slot[aria-pressed="true"] { border-color: var(--gear-color); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gear-color) 30%, transparent); }
 .slot.candidate { border-style: dashed; border-color: var(--gear-color); }
 .slot:disabled { border-style: dashed; }
@@ -136,6 +138,8 @@ h1 { font-size: 26px; letter-spacing: .09em; line-height: 1.18; font-weight: 850
 .coil { background: repeating-radial-gradient(ellipse, currentColor 0 2px, transparent 3px 5px); border-radius: 50%; }
 .spike { clip-path: polygon(96% 6%, 69% 78%, 52% 63%, 27% 95%, 14% 82%, 37% 53%, 17% 43%); }
 .dynamo { clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%, 50% 0%, 37% 28%, 54% 28%, 48% 47%, 68% 47%, 43% 76%, 47% 55%, 30% 55%, 37% 28%); }
+.prism { clip-path: polygon(50% 5%, 98% 86%, 2% 86%, 50% 5%, 50% 30%, 22% 74%, 78% 74%, 50% 30%); }
+.accelerator { clip-path: polygon(5% 75%, 38% 24%, 55% 24%, 22% 75%, 5% 75%, 45% 75%, 78% 24%, 95% 24%, 62% 75%, 45% 75%); }
 .equipment-info { margin-top: 8px; min-height: 28px; justify-content: space-between; gap: 8px; }
 .equipment-copy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; line-height: 1.3; }
 .equipment-copy strong { font-size: 12px; font-weight: 700; }
@@ -468,8 +472,8 @@ kbd { border: 1px solid #4e6160; border-radius: 3px; font-family: inherit; color
       </div>
     </div>
     <div class="mission-summary">
-      <div class="mission-heading"><h3>关卡进度</h3><strong id="home-progress">0 / 16</strong></div>
-      <div class="mission-progress" role="progressbar" id="home-meter" aria-label="通关进度" aria-valuemin="0" aria-valuemax="16" aria-valuenow="0"><span id="home-fill"></span></div>
+      <div class="mission-heading"><h3>关卡进度</h3><strong id="home-progress">0 / 24</strong></div>
+      <div class="mission-progress" role="progressbar" id="home-meter" aria-label="通关进度" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"><span id="home-fill"></span></div>
       <p id="home-current">下一目标 · 残骸边境</p>
     </div>
   </section>
@@ -555,7 +559,7 @@ kbd { border: 1px solid #4e6160; border-radius: 3px; font-family: inherit; color
       </form>
     </div>
     <dl class="pilot-record">
-      <div><dt>已通关</dt><dd id="profile-clears">0 / 16</dd></div>
+      <div><dt>已通关</dt><dd id="profile-clears">0 / 24</dd></div>
       <div><dt>完成对局</dt><dd id="profile-runs">0</dd></div>
       <div><dt>累计击毁</dt><dd id="profile-kills">0</dd></div>
     </dl>
@@ -626,6 +630,135 @@ kbd { border: 1px solid #4e6160; border-radius: 3px; font-family: inherit; color
 <script>
 'use strict';
 
+const COLD_FRONT_GEAR = {
+  prism: {name: '折光棱镜', color: '#d5b5ff', cooldown: 1.12, range: 215, damage: [17, 34, 59],
+    descriptions: ['优先攻击当前轨可破盾的首领，对护盾造成双倍伤害', '增强光束伤害，护盾伤害仍为两倍', '进一步提高光束伤害和射速']},
+  accelerator: {name: '回避增幅器', color: '#87efd2',
+    descriptions: ['躲开首领的轨道冲击后，武器射速提升 30%，持续 1.2 秒', '射速提升持续 1.8 秒', '射速提升持续 2.5 秒']},
+};
+
+const COLD_FRONT_STAGES = [
+  {id: 17, name: '寒潮信标', detail: '快袭机从两翼逼近，外圈还有搬运舰。拦下补给可以提早合成装备。', starter: 'frost',
+    formation: 'flanks', dash: true, tint: '#9be4ef', boss: '信标掠袭舰', bossColor: '#95cbff',
+    bossHp: 2580, bossWarning: 1.52, bossDamage: 36, bossInterval: 2.34, bossSpeed: 5.7, salvageEvery: 2,
+    waves: [
+      {count: 17, gap: .73, name: '寒潮斥候'}, {count: 24, gap: .58, name: '信标补给', cargoAt: [5, 15], pressure: .22},
+      {count: 31, gap: .45, name: '两翼截击', cargoAt: [7, 20], pressure: .52},
+      {count: 37, gap: .38, name: '冰线合围', cargoAt: [10, 23], pressure: .84},
+      {count: 35, gap: .39, name: '信标掠袭舰来袭', pressure: .96},
+    ]},
+  {id: 18, name: '折光哨站', detail: '首领的第一层护盾要从内轨打破。降至约三分之二血量时，切到外轨破第二层盾。', starter: 'pulse',
+    reward: 'prism', shield: 260, shieldPhases: [{at: .65, amount: 230, orbit: 'outer'}],
+    tint: '#d5b5ff', boss: '折光巡防舰', bossColor: '#cba8ff', bossHp: 2360,
+    bossWarning: 1.6, bossDamage: 38, bossInterval: 2.4, bossSpeed: 5.0, salvageEvery: 2,
+    waves: [
+      {count: 17, gap: .73, name: '哨站巡逻'}, {count: 24, gap: .58, name: '棱镜补给', pressure: .24},
+      {count: 32, gap: .45, name: '反射带突入', pressure: .55},
+      {count: 38, gap: .38, name: '哨站近卫', pressure: .84},
+      {count: 35, gap: .40, name: '折光巡防舰来袭', pressure: .96},
+    ]},
+  {id: 19, name: '碎冰回廊', detail: '贴轨机在外轨横移，分裂舰被击毁后会散出碎片机。利用窄航道集中火力。', starter: 'frost',
+    formation: 'corridor', skirting: true, dash: true, tint: '#a8efed', boss: '冰脊穿行舰', bossColor: '#92e7e4',
+    bossHp: 2670, bossWarning: 1.45, bossDamage: 39, bossInterval: 2.2, bossSpeed: 5.8, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .73, name: '回廊巡哨'}, {count: 25, gap: .57, name: '贴轨先遣', splittersAt: [7, 18], pressure: .24},
+      {count: 32, gap: .44, name: '冰屑散射', splittersAt: [5, 14, 25], pressure: .57},
+      {count: 39, gap: .37, name: '回廊拥塞', splittersAt: [7, 18, 28], pressure: .87},
+      {count: 36, gap: .38, name: '冰脊穿行舰来袭', splittersAt: [6, 21], pressure: 1.0},
+    ]},
+  {id: 20, name: '漂移船坞', detail: '搬运舰受护航舰保护。用断链脉冲或集中火力，赶在补给撤离前击毁搬运舰。', starter: 'arc',
+    escorts: true, escortAtHealth: .55, formation: 'split', tint: '#b0eeae',
+    boss: '船坞调度舰', bossColor: '#a3e1b4', bossHp: 2710,
+    bossWarning: 1.46, bossDamage: 39, bossInterval: 2.18, bossSpeed: 5.65, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .72, name: '船坞外围'},
+      {count: 24, gap: .57, name: '护航交接', escortsAt: [5], cargoAt: [6, 17], pressure: .26},
+      {count: 33, gap: .44, name: '补给封锁', escortsAt: [6, 20], cargoAt: [7, 21], pressure: .60},
+      {count: 39, gap: .37, name: '舰队撤离', escortsAt: [6, 21, 33], cargoAt: [7, 22, 34], pressure: .91},
+      {count: 36, gap: .38, name: '船坞调度舰来袭', escortsAt: [24], cargoAt: [25], pressure: 1.03},
+    ]},
+  {id: 21, name: '噪声阵列', detail: '炮艇趁轨道干扰发射飞弹。见到青色轨道预警就切轨，保持武器和拦截阵列运转。', starter: 'pulse',
+    gunners: true, interference: {from: 1, interval: 7.6, warning: 1.6, duration: 1.4},
+    tint: '#89e4d7', boss: '噪声指挥舰', bossColor: '#7bcec4', bossHp: 2560,
+    bossWarning: 1.5, bossDamage: 37, bossInterval: 2.75, bossSpeed: 5.4, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .72, name: '阵列外围'}, {count: 24, gap: .58, name: '炮艇试探', pressure: .18},
+      {count: 30, gap: .46, name: '失真锁定', pressure: .50}, {count: 35, gap: .39, name: '齐射窗口', pressure: .79},
+      {count: 34, gap: .40, name: '噪声指挥舰来袭', pressure: .9},
+    ]},
+  {id: 22, name: '双相闸门', detail: '按外轨、内轨、外轨的顺序打破三层护盾。先躲轨道冲击，再切回可破盾的轨道。', starter: 'arc',
+    shield: 235, shieldOrbit: 'outer', shieldPhases: [{at: .68, amount: 260, orbit: 'inner'}, {at: .35, amount: 240, orbit: 'outer'}],
+    alternatingLocks: true, dash: true, tint: '#b4c9ff', boss: '双相守门舰', bossColor: '#adb4ff', bossHp: 2520,
+    bossWarning: 1.55, bossDamage: 42, bossInterval: 2.35, bossSpeed: 4.7, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .71, name: '闸外侦察'}, {count: 25, gap: .55, name: '闸门先锋', pressure: .25},
+      {count: 33, gap: .44, name: '双相交错', pressure: .59}, {count: 39, gap: .37, name: '闸门护卫', pressure: .9},
+      {count: 37, gap: .38, name: '双相守门舰来袭', pressure: 1.04},
+    ]},
+  {id: 23, name: '断层炮阵', detail: '护航舰掩护攻城炮舰架炮。看到瞄准星核的虚线后，优先击毁炮舰或用震荡钉打断。', starter: 'pulse',
+    escorts: true, formation: 'flanks', tint: '#ffd2a6', boss: '断层围攻舰', bossColor: '#f8b69b',
+    bossHp: 2780, bossWarning: 1.43, bossDamage: 42, bossInterval: 2.16, bossSpeed: 5.6, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .71, name: '断层哨戒'}, {count: 25, gap: .55, name: '炮阵架设', escortsAt: [5], breachersAt: [6, 16], pressure: .23},
+      {count: 33, gap: .44, name: '掩护校准', escortsAt: [7, 20], breachersAt: [8, 21], pressure: .59},
+      {count: 40, gap: .37, name: '交叉炮火', escortsAt: [5, 20, 30], breachersAt: [6, 15, 21, 31], pressure: .9},
+      {count: 37, gap: .38, name: '断层围攻舰来袭', breachersAt: [5, 19, 29], pressure: 1.04},
+    ]},
+  {id: 24, name: '寒潮枢纽', detail: '首领交替呼叫护航和封锁轨道，血量降到四分之三和三分之一时会展开内轨与外轨护盾。', starter: 'arc',
+    reward: 'accelerator', escorts: true, relayBoss: true, dash: true, alternatingLocks: true,
+    shieldPhases: [{at: .75, amount: 285, orbit: 'inner'}, {at: .33, amount: 270, orbit: 'outer'}],
+    tint: '#a6e5ff', boss: '寒潮统御舰', bossColor: '#8cdbff', bossHp: 2980,
+    bossWarning: 1.55, bossDamage: 47, bossInterval: 2.2, bossSpeed: 4.75, salvageEvery: 2,
+    waves: [
+      {count: 18, gap: .71, name: '枢纽斥候'}, {count: 26, gap: .55, name: '低温近卫', escortsAt: [6], pressure: .27},
+      {count: 34, gap: .44, name: '冰屑围攻', splittersAt: [7, 18, 26], pressure: .63},
+      {count: 40, gap: .37, name: '枢纽防线', escortsAt: [6, 23], splittersAt: [12, 30], pressure: .92},
+      {count: 38, gap: .39, name: '寒潮统御舰来袭', pressure: 1.05},
+    ]},
+];
+
+function raisePhaseShield(boss) {
+  const phase = game.stage.shieldPhases?.[boss.shieldPhase];
+  if (!phase || boss.health > boss.maxHealth * phase.at) return false;
+  boss.health = boss.maxHealth * phase.at;
+  boss.shield = boss.maxShield = phase.amount;
+  boss.shieldOrbit = phase.orbit;
+  boss.shieldPhase++;
+  ripple(boss, 68, SHIELD_COLOR);
+  notes([380, 280, 450], 'sine', .06);
+  return true;
+}
+
+function firePrism(item, origin) {
+  const spec = GEAR.prism;
+  const shield = game.enemies.find(enemy => !enemy.dead && enemy.shield > 0 &&
+    enemy.shieldOrbit === game.orbit && distance(origin, enemy) <= spec.range);
+  const target = shield ?? closest(origin, spec.range, game.enemies);
+  if (!target) return;
+  supportBeam(origin, target, spec.color, 'intercept');
+  target.hitColor = spec.color;
+  strike(target, spec.damage[item.tier - 1] * (target === shield ? 2 : 1));
+  recoverWeapon(item);
+}
+
+function boostAfterDodge() {
+  const tier = equippedTier('accelerator');
+  if (!tier) return;
+  startOverdrive([1.2, 1.8, 2.5][tier - 1]);
+  ripple(port(game.radius, game.angle), 38, GEAR.accelerator.color);
+}
+
+function drawShieldOrbit(boss) {
+  if (!game.stage.shieldPhases || !(boss?.shield > 0) || boss.lockedOrbit) return;
+  pen.save();
+  pen.strokeStyle = SHIELD_COLOR;
+  pen.lineWidth = 2;
+  pen.setLineDash([2, 7]);
+  circle(pen, CENTER.x, CENTER.y, ORBITS[boss.shieldOrbit] + 6);
+  pen.stroke();
+  pen.restore();
+}
+
 const WIDTH = 480;
 const HEIGHT = 420;
 const CENTER = {x: 240, y: 210};
@@ -667,11 +800,12 @@ const GEAR = {
     descriptions: ['优先攻击蓄能敌舰，打断蓄能', '增强伤害与打断范围', '可同时打断附近另一艘敌舰']},
   dynamo: {name: '双轨电枢', color: '#b4e4ff',
     descriptions: ['一圈内双轨各跑至少四分之一圈，过线提速', '射速提升 30%，持续 2.25 秒', '射速提升 30%，持续 3 秒']},
+  ...COLD_FRONT_GEAR,
 };
 const BASE_GEAR = ['pulse', 'frost', 'arc'];
 const INTRO = '守住 5 波怪潮。绕圈赚废料，打捞装备，再合成升级。';
 const STAGES_PER_CHAPTER = 8;
-const CHAPTER_NAMES = ['星核防线', '余烬外环'];
+const CHAPTER_NAMES = ['星核防线', '余烬外环', '寒潮前线'];
 const EQUIPMENT_PER_PAGE = 8;
 const STAGES = [
   {id: 1, name: '残骸边境', detail: '前三波积攒火力，后两波迎击密集装甲编队。', starter: 'pulse',
@@ -813,6 +947,7 @@ const STAGES = [
       {count: 39, gap: .37, name: '最后一道防线', splittersAt: [8, 23], pressure: .94},
       {count: 36, gap: .39, name: '余烬执政舰来袭', pressure: 1.03},
     ]},
+  ...COLD_FRONT_STAGES,
 ];
 const CATALOG_KINDS = Object.keys(GEAR);
 const GEAR_SOURCES = new Map(STAGES.filter(stage => stage.reward).map(stage => [stage.reward, stage]));
@@ -1036,7 +1171,7 @@ function syncHud() {
   const resonanceReady = game.railHeld >= RESONANCE_CHARGE && game.time >= game.resonatorReadyAt && equippedTier('resonator') > 0;
   const overdriveReady = game.time < game.overdriveUntil;
   const orbit = game.orbit === 'outer' ? '外轨' : '内轨';
-  const orbitEffect = (overdriveReady && '电枢提速') || (resonanceReady && '共振就绪') || (game.capacitorCharged && '电容已充能') ||
+  const orbitEffect = (overdriveReady && '武器提速') || (resonanceReady && '共振就绪') || (game.capacitorCharged && '电容已充能') ||
     (game.orbit === 'outer' ? '射速 +45%' : '蓄积维修');
   ui['orbit-label'].textContent = orbit + ' · ' + orbitEffect;
   ui['orbit-label'].classList.toggle('inner', game.orbit === 'inner');
@@ -1098,6 +1233,7 @@ function syncNotice() {
   const bossIncoming = game.wave === game.stage.waves.length - 1 && !game.bossDefeated;
   const boss = game.enemies.find(enemy => enemy.kind === 'boss');
   const shielded = boss?.shield > 0;
+  const shieldRail = boss?.shieldOrbit === 'outer' ? '外轨' : '内轨';
   const escorted = Boolean(boss && activeEscort(boss));
   const interferenceOrbit = game.interference?.orbit;
   const jammed = game.time < game.jammedUntil;
@@ -1110,7 +1246,7 @@ function syncNotice() {
   const status = {
     ready: '系统待命', paused: '防守暂停', won: '威胁解除', lost: '防守中断',
     playing: attackWarning || interferenceWarning || (jammed ? '武器受到干扰' : '') ||
-      (shielded ? '首领护盾 · 内轨破盾' : '') || (escorted ? '首领受到护航' : '') || (game.respite !== null ? '波次间歇' :
+      (shielded ? `首领护盾 · ${shieldRail}破盾` : '') || (escorted ? '首领受到护航' : '') || (game.respite !== null ? '波次间歇' :
       game.bossDefeated ? '清理残余敌机' : game.stage.waves[game.wave].name),
   }[game.mode];
   ui.status.textContent = status;
@@ -1121,7 +1257,7 @@ function syncNotice() {
     if (attackWarning) hint = game.orbit === lockedOrbit ? game.stage.boss + '即将攻击当前轨道，立即切轨！' : '已避开锁定轨道，等冲击结束再切回。';
     else if (interferenceWarning) hint = game.orbit === interferenceOrbit ? '切到另一条轨道，避开即将造成停火的干扰。' : '当前轨道安全，等干扰结束再切回。';
     else if (jammed) hint = '武器短暂停火，冷却完会自动恢复。';
-    else if (shielded) hint = game.orbit === 'outer' ? '切入内轨攻击，打碎裂隙守卫的护盾。' : '内轨正在破盾，留意下一次锁轨预警。';
+    else if (shielded) hint = game.orbit === boss.shieldOrbit ? `${shieldRail}可破盾，留意下一次锁轨预警。` : `切到${shieldRail}攻击，打破首领护盾。`;
     else if (escorted) hint = '顺着金色光束找到护航舰，击毁它或用断链脉冲解除保护。';
     else if (armorThreat) hint = '重装舰正在接近，切内轨可打出完整伤害。';
     else if (game.waitingTrial) hint = '试装已到。合成或分解腾出一格，自动装入。';
@@ -1356,7 +1492,9 @@ function addEnemy(kind, angle, radius) {
   if (kind === 'boss') {
     enemy.pulseTimer = 2.3;
     enemy.lockedOrbit = null;
-    enemy.shield = stage.shield ?? 0;
+    enemy.shield = enemy.maxShield = stage.shield ?? 0;
+    enemy.shieldOrbit = stage.shieldOrbit ?? 'inner';
+    enemy.shieldPhase = 0;
     if (stage.relayBoss) {
       enemy.relayPhase = 'recovery';
       enemy.relayAt = game.time + .95;
@@ -1390,6 +1528,10 @@ function attack(item, origin) {
   }
   if (item.kind === 'spike') {
     fireStaggerSpike(item, origin);
+    return;
+  }
+  if (item.kind === 'prism') {
+    firePrism(item, origin);
     return;
   }
   if (item.kind === 'deflector') {
@@ -1445,12 +1587,21 @@ function recoverWeapon(item) {
   item.readyIn = GEAR[item.kind].cooldown / (game.orbit === 'outer' ? 1.45 : 1) / overdrive * (item.tier === 3 ? .85 : 1);
 }
 
+function startOverdrive(duration) {
+  if (game.time >= game.overdriveUntil) {
+    for (const item of game.kit) {
+      if (item?.readyIn > 0) item.readyIn /= 1.3;
+    }
+  }
+  game.overdriveUntil = Math.max(game.overdriveUntil, game.time + duration);
+}
+
 function strike(enemy, damage, orbit = game.orbit) {
   if (enemy.dead) return;
   if (enemy.shield > 0) {
     enemy.hitColor = SHIELD_COLOR;
     enemy.flash = .09;
-    if (orbit === 'outer') return;
+    if (orbit !== enemy.shieldOrbit) return;
     enemy.shield = Math.max(0, enemy.shield - damage);
     if (enemy.shield === 0) {
       ripple(enemy, 76, SHIELD_COLOR);
@@ -1464,6 +1615,7 @@ function strike(enemy, damage, orbit = game.orbit) {
   const escortScale = activeEscort(enemy) ? .65 : 1;
   enemy.health -= damage * armorScale * escortScale;
   enemy.flash = .09;
+  if (enemy.kind === 'boss' && raisePhaseShield(enemy)) return;
   if (enemy.health > 0) return;
   enemy.dead = true;
   game.kills += 1;
@@ -1523,6 +1675,7 @@ function updateBossPulse(enemy, dt) {
     if (game.hp === 0) endGame(false, '核心被轨道冲击击毁');
   } else {
     announce('已躲开轨道冲击。', 1.5);
+    boostAfterDodge();
     notes([455], 'sine', .055);
   }
   enemy.lockedOrbit = null;
@@ -1653,6 +1806,7 @@ const SHOT_SOUNDS = {
   disruptor: {frequencies: [910, 600, 340], type: 'sine', volume: .036},
   mine: {frequencies: [420, 270], type: 'triangle', volume: .026},
   spike: {frequencies: [540, 298], type: 'triangle', volume: .032},
+  prism: {frequencies: [680, 1020], type: 'sine', volume: .033},
 };
 
 function playShot(kind) {
@@ -1975,7 +2129,7 @@ function drawEnemy(enemy, time) {
       pen.fillStyle = '#432454';
       pen.fillRect(x - width / 2, y - size - 13, width, 3);
       pen.fillStyle = SHIELD_COLOR;
-      pen.fillRect(x - width / 2, y - size - 13, width * enemy.shield / game.stage.shield, 3);
+      pen.fillRect(x - width / 2, y - size - 13, width * enemy.shield / enemy.maxShield, 3);
     }
   }
 }
@@ -2115,7 +2269,9 @@ function render(time) {
       START_ANGLE + Math.min(game.innerTravel * 2, FULL_TURN));
     pen.stroke();
   }
-  const lockedOrbit = game.enemies.find(enemy => enemy.kind === 'boss')?.lockedOrbit;
+  const boss = game.enemies.find(enemy => enemy.kind === 'boss');
+  const lockedOrbit = boss?.lockedOrbit;
+  drawShieldOrbit(boss);
   if (lockedOrbit) {
     pen.save();
     pen.setLineDash([7, 5]);
@@ -2950,10 +3106,7 @@ function callSiegeReinforcement(boss) {
 function chargeDynamo() {
   const tier = equippedTier('dynamo');
   if (!tier || game.innerTravel < FULL_TURN / 4 || game.innerTravel > FULL_TURN * .75) return;
-  game.overdriveUntil = game.time + [1.6, 2.25, 3][tier - 1];
-  for (const item of game.kit) {
-    if (item?.readyIn > 0) item.readyIn /= 1.3;
-  }
+  startOverdrive([1.6, 2.25, 3][tier - 1]);
   ripple(port(game.radius, game.angle), 42, GEAR.dynamo.color);
   notes([420, 590, 720], 'sine', .04);
 }
